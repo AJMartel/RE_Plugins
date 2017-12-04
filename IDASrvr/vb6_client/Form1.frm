@@ -160,6 +160,14 @@ Sub SampleAPI()
     List1.AddItem "Jumping to 1st inst"
     ida.Jump va
     
+    ida.pythonTest "print 'test python command from IDASrvr Client!'"
+    ida.pythonTest "print 'Is IDA Api available without import? BegineEA='+ hex(BeginEA())"
+    ida.pythonTest "import idasrvr" & vbCrLf & "print 'idasrvr.test = ' + str(idasrvr.test())"
+    resp = ida.pythonTest("reply(123)")
+    resp = ida.pythonTest("reply('A'*1001)")
+    List1.AddItem "Python len(retVal) = " & Len(resp) & " value = " & resp
+    
+    
 End Sub
 
 Private Sub Form_Unload(Cancel As Integer)

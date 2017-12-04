@@ -28,6 +28,8 @@ Note: this includes a decompile function that requires the hexrays decompiler. I
 #include <search.hpp>
 #include <xref.hpp>
 
+bool SendTextMessage(int hwnd, char *Buffer, int blen); 
+
 #define HAS_DECOMPILER //if you dont have the hexrays decompiler comment this line out..
 
 #ifdef HAS_DECOMPILER
@@ -35,6 +37,73 @@ Note: this includes a decompile function that requires the hexrays decompiler. I
 	hexdsp_t *hexdsp = NULL;  
 	int __stdcall DecompileFunction(int offset, char* fpath);
 #endif
+
+#define PYTHON_TEST
+#ifdef PYTHON_TEST
+//note changed to cdecl as default calling convention..
+//otherwise in pyport.h had to: define PyAPI_FUNC(RTYPE) __declspec(dllimport)  RTYPE __cdecl
+//pyconfig.h ifdef _DEBUG pragma comment(lib,"python27_d.lib") <-- IDA uses release build of dll always
+//was causing plugin load fail for debug build
+#ifdef _DEBUG
+	#undef _DEBUG
+	#include <python27\Python.h>
+	#define _DEBUG
+#else
+	#include <python27\Python.h>
+#endif
+
+int hPYClient = 0;
+
+static PyObject *pyreply(PyObject *self, PyObject* args)
+{
+    const char *command;
+    if (!PyArg_ParseTuple(args, "s", &command)) return NULL;
+    int rv = SendTextMessage(hPYClient, (char*)command, strlen(command)); 
+    return PyLong_FromLong(rv);
+}
+
+static PyObject *pytest(PyObject *self, PyObject* args)
+{
+    return PyInt_FromLong(42L);
+}
+
+static PyMethodDef pyClient_methods[] = {
+	{"reply", pyreply, METH_VARARGS,  NULL},
+	{"test",  pytest,  METH_NOARGS,   NULL},
+    {NULL,NULL}           /* sentinel */
+};
+
+void init_pyClient(void)
+{
+    PyImport_AddModule("idasrvr");
+    Py_InitModule("idasrvr", pyClient_methods);
+}
+
+//we take care of some housekeeping so client scripts are easier..
+char* pyStub = 
+"import idasrvr\r\n"
+"def chunkString(s,sz=1000):\r\n"
+"    o = []\r\n"
+"    while s:\r\n"
+"        o.append(s[:sz])\r\n"
+"        s = s[sz:]\r\n"
+"    return o\r\n"
+"\r\n"
+"def reply(message):\r\n"
+"    message = str(message)\r\n"
+"    print \"sending msg '%s'\" % message\r\n"
+"  \r\n"
+"    if len(message) > 1000:\r\n"
+"        chunks = chunkString(message)\r\n"
+"        for c in chunks:\r\n"
+"            idasrvr.reply(c)\r\n"
+"    else:\r\n"
+"        idasrvr.reply(message)\r\n"
+;
+
+#endif
+
+
 
 int hasDecompiler = 0;
 int InterfaceVersion = 1;
@@ -302,6 +371,10 @@ int HandleQuickCall(unsigned int fIndex, unsigned int arg1){
 				return isData(getFlags(arg1));
 		case 46:
 				return decode_insn(arg1);
+		case 47:
+				return get_long(arg1);
+		case 48:
+				return get_word(arg1);
 
 	}
 
@@ -382,6 +455,8 @@ int HandleMsg(char* m){
 	                "addcomment","getcomment","addcodexref","adddataxref","delcodexref","deldataxref",
 	/*               32          33         34        35           36        37           38         39    */
 					"funcindex","nextea","prevea","makestring","makeunk", "screenea", "findcode", "decompile",
+    /*               40 */
+					"pycmd",
 					"\x00"};
 	int i=0;
 	int argc=0;
@@ -405,7 +480,7 @@ int HandleMsg(char* m){
 		if(strcmp(cmds[i],args[0])==0 ) break;
 	}
 
-	//if(m_debug) msg("command handler: %d",i);
+	if(m_debug) msg("command handler: %d",i);
 
 	//handle specific command
 	switch(i){
@@ -641,6 +716,20 @@ int HandleMsg(char* m){
 					return DecompileFunction( atoi(args[1]), args[2]);
 #endif
 
+#ifdef PYTHON_TEST
+		  case 40: //pycmd:hwnd:replace(cmd,":",chr(5))
+			  if( argc != 2 ){msg("pycmd needs 2 args\n"); return -1;}
+			  hPYClient = atoi(args[1]);                    //hwnd used in idasrvr.reply so we dont have to track in py
+			  for(i=0;i<strlen(args[2]);i++){               //since we use : as a token transpose back..
+				  if(args[2][i] == 5) args[2][i] = ':';     // use idasrvr.reply to ret vals to caller through ipc
+			  }
+			  PyGILState_STATE state = PyGILState_Ensure(); // Acquire the GIL
+			  init_pyClient();                              // add our idasrvr extension to the pyEnv
+			  PyRun_SimpleString(pyStub);
+			  PyRun_SimpleString(args[2]);                  // execute the python code passed to us by remote client
+			  PyGILState_Release(state);                    // Release the GIL
+#endif
+
 	}				
 
 };
@@ -729,7 +818,7 @@ int idaapi init(void)
 	  }
 	#endif
 
-  return PLUGIN_KEEP;
+  return PLUGIN_KEEP; //keeps it loaded into mem always..(for server to always be running)
 }
 
 void idaapi term(void)

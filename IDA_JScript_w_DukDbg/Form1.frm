@@ -1,6 +1,6 @@
 VERSION 5.00
-Object = "{831FDD16-0C5C-11D2-A9FC-0000F8754DA1}#2.0#0"; "MSCOMCTL.OCX"
-Object = "{047848A0-21DD-421D-951E-B4B1F3E1718D}#81.0#0"; "dukDbg.ocx"
+Object = "{831FDD16-0C5C-11D2-A9FC-0000F8754DA1}#2.0#0"; "mscomctl.ocx"
+Object = "{047848A0-21DD-421D-951E-B4B1F3E1718D}#89.0#0"; "dukDbg.ocx"
 Object = "{3B7C8863-D78F-101B-B9B5-04021C009402}#1.2#0"; "RICHTX32.OCX"
 Object = "{248DD890-BB45-11CF-9ABC-0080C7E7B78D}#1.0#0"; "MSWINSCK.OCX"
 Begin VB.Form Form1 
@@ -213,6 +213,9 @@ Begin VB.Form Form1
       Begin VB.Menu mnuSHellExt 
          Caption         =   "Register .idajs Shell Extension"
       End
+      Begin VB.Menu mnuSetTimeout 
+         Caption         =   "Set Timeout"
+      End
    End
 End
 Attribute VB_Name = "Form1"
@@ -254,7 +257,19 @@ Private Sub cboSaved_Click()
 End Sub
 
 Private Sub Check1_Click()
-    List1.Visible = CBool(Check1.Value)
+    List1.Visible = CBool(Check1.value)
+End Sub
+
+Private Sub mnuSetTimeout_Click()
+    Dim l As Long, msg As String
+    On Error Resume Next
+    msg = Replace("Enter new ms timeout value\n  0 to disable\n\nIf you get a endless loop close IDA to break it", "\n", vbCrLf)
+    l = CLng(InputBox(msg, , txtjs.timeout))
+    If Err.Number <> 0 Then
+        MsgBox "Invalid number set ignoring"
+        Exit Sub
+    End If
+    txtjs.timeout = l
 End Sub
 
 Private Sub txtjs_StateChanged(state As dukDbg.dbgStates)
@@ -300,12 +315,18 @@ Private Sub Form_Load()
     'quick way for IDASrvr to be able to find us for launching..
     SaveSetting "IPC", "HANDLES", "IDAJSCRIPT", App.path & "\IDA_JScript.exe"
     
+    If Command = "/install" Then
+        Call installPLW(True, True)
+        Call register_idajsFileExt
+        End
+    End If
+        
     FormPos Me, True
     Me.Visible = True
     
     Set remote.ws = Winsock1
     Set sci = txtjs.sci
-    If sci Is Nothing Then MsgBox "Failed to get DukDbg.sci"
+    If sci Is Nothing Then MsgBox "Failed to get DukDbg.sci version mismatch between scivb and dukdbg :("
 
     'to use with duk we MUST use correct case on these since the relay is through JS
     
@@ -315,11 +336,11 @@ Private Sub Form_Load()
                                 "xRefsTo xRefsFrom getName functionName hideBlock showBlock setname addComment getComment addCodeXRef addDataXRef " & _
                                 "delCodeXRef delDataXRef funcVAByName renameFunc find decompile jump jumpRVA refresh undefine showEA hideEA " & _
                                 "removeName makeCode funcIndexFromVA nextEA prevEA funcCount() numFuncs() functionStart functionEnd readByte " & _
-                                "originalByte imageBase screenEA() quickCall clearDecompilerCache(),isCode,isData"
+                                "originalByte imageBase screenEA() quickCall clearDecompilerCache() isCode isData readLong readShort"
                                
      txtjs.AddIntellisense "list", "AddItem Clear ListCount Enabled"
     
-     txtjs.AddIntellisense "app", "intToHex t clearLog caption alert getClipboard setClipboard benchMark askValue exec enableIDADebugMessages"
+     txtjs.AddIntellisense "app", "intToHex t clearLog caption alert getClipboard setClipboard benchMark askValue exec enableIDADebugMessages timeout do_events() hexDump hexstr toBytes"
        
      txtjs.AddIntellisense "remote", "ip response ScanProcess ResolveExport"
      
@@ -562,23 +583,7 @@ Private Sub mnuSelectIDAInstance_Click()
 End Sub
 
 Private Sub mnuSHellExt_Click()
-    
-    Dim homedir As String
-    
-    homedir = App.path & "\IDA_JScript.exe"
-    If Not fileExists(homedir) Then Exit Sub
-    cmd = "cmd /c ftype IDAJS.Document=""" & homedir & """ %1 && assoc .idajs=IDAJS.Document"
-    
-    On Error Resume Next
-    Shell cmd, vbHide
-    
-    Dim wsh As Object 'WshShell
-    Set wsh = CreateObject("WScript.Shell")
-    If Not wsh Is Nothing Then
-        wsh.RegWrite "HKCR\IDAJS.Document\DefaultIcon\", homedir & ",0"
-    End If
-    
-    
+   MsgBox "Registered .idajs file extension: " & register_idajsFileExt()
 End Sub
 
 

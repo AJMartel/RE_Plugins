@@ -22,11 +22,25 @@ Private Sub Class_Initialize()
     ipc.Listen Form1.hwnd
 End Sub
 
+Property Get timeout()
+    timeout = Form1.txtjs.timeout
+End Property
+
+Property Let timeout(v)
+    On Error Resume Next
+    Form1.txtjs.timeout = CLng(v)
+End Property
+
 Property Get isUp() As Boolean
     isUp = IIf(IsWindow(ipc.RemoteHWND) = 1, True, False)
 End Property
 
+Sub do_events()
+    DoEvents
+End Sub
+
 Sub die(msg)
+    Form1.txtjs.timeout = 1
     Form1.txtjs.StopExecution
     t msg
 End Sub
@@ -68,6 +82,7 @@ End Property
 Sub t(data)
     Form1.Text1.Text = Form1.Text1.Text & vbCrLf & data
     Form1.Text1.SelStart = Len(Form1.Text1.Text)
+    DoEvents
 End Sub
 
 Sub clearLog()
@@ -311,6 +326,18 @@ End Function
     readByte = CByte(ipc.quickCall(qcmReadByte, CLng(va)))
 End Function
 
+Function readLong(va)
+    On Error Resume Next
+    If va = 0 Or va = -1 Then Exit Function
+    readLong = CLng(ipc.quickCall(qcmReadLong, CLng(va)))
+End Function
+
+Function readShort(va)
+    On Error Resume Next
+    If va = 0 Or va = -1 Then Exit Function
+    readShort = CLng(ipc.quickCall(qcmReadShort, CLng(va)))
+End Function
+
 Function originalByte(va)
     On Error Resume Next
     originalByte = CByte(ipc.quickCall(qcmOrgByte, CLng(va)))
@@ -389,21 +416,53 @@ End Sub
 
 Function readFile(filename) As Variant
   Dim f As Long
-  Dim Temp As Variant
+  Dim temp As Variant
+  
+  On Error Resume Next
+   
+  If InStr(1, filename, "%sp%", vbTextCompare) > 0 Then
+        If Len(Form1.loadedFile) = 0 Then
+            MsgBox "can not use %sp variable yet in file path file not saved!"
+            Exit Function
+        End If
+        
+        temp = fso.GetParentFolder(Form1.loadedFile)
+        filename = Replace(filename, "%sp%", temp, , , vbTextCompare)
+  End If
+  
+  'todo support %desktop%
+  
   f = FreeFile
-  Temp = ""
+  temp = ""
    Open filename For Binary As #f        ' Open file.(can be text or image)
-     Temp = Input(FileLen(filename), #f) ' Get entire Files data
+     temp = Input(FileLen(filename), #f) ' Get entire Files data
    Close #f
-   readFile = Temp
+   readFile = temp
 End Function
 
 Sub writeFile(path, it)
+    On Error Resume Next
+    
+    Dim temp As String
+    
+    If InStr(1, path, "%sp%", vbTextCompare) > 0 Then
+    
+        If Len(Form1.loadedFile) = 0 Then
+            MsgBox "can not use %sp variable yet in file path file not saved!"
+            Exit Sub
+        End If
+        
+        temp = fso.GetParentFolder(Form1.loadedFile)
+        path = Replace(path, "%sp%", temp, , , vbTextCompare)
+      
+    End If
+  
     Dim f As Long
     f = FreeFile
     Open path For Output As #f
     Print #f, it
     Close f
+    
 End Sub
 
 Sub appendFile(path, it)
@@ -457,6 +516,20 @@ Function benchMark() As Long
     QueryPerformanceCounter i
     benchMark = i.lowpart
 End Function
+
+Function hexDump(x) As String
+    hexDump = Module1.hexDump(CStr(x), , , hoDump)
+End Function
+
+Function hexstr(x) As String
+    hexstr = Module1.hexDump(CStr(x), , , hoHexOnly)
+End Function
+
+Function toBytes(hexstr) As String
+    Dim out As String
+    If Module1.toBytes(CStr(hexstr), out) Then toBytes = out
+End Function
+
 
 'Function refListToArray(x) As Long() 'no way to use a vb6 array in js?
 '    On Error Resume Next

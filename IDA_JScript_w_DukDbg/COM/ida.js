@@ -1,6 +1,9 @@
 /*
 	Property get isUp As Boolean
+	Property get timeout As Long
+	Property let timeout As Long
 	Sub Caption(msg)
+	sub do_events()
 	Function alert(msg)
 	Function Message(msg As String)
 	Function MakeStr(va,  ascii As Boolean = True)
@@ -70,6 +73,11 @@
 	Function BenchMark() As Long
 	Function isCode(va) as Long
 	Function isData(va) as Long
+	Function ReadLong(va) As Long
+    Function ReadShort(va) As Long
+    Function hexDump(x) As String
+	Function hexstr(x) As String
+	Function toBytes(hexstr) As String
 	Sub clearDecompilerCache()
 #	'Function refListToArray(x) As Long() 
 #	'Function InstSize(offset)
@@ -83,6 +91,10 @@ function idaClass(){
 		return resolver('ida.Caption', arguments.length,0, msg);
 	}
 
+	this.do_events = function(){
+		return resolver('ida.do_events', arguments.length,0);
+	}
+	
 	this.alert = function(msg){
 		return resolver('ida.alert', arguments.length,0, msg);
 	}
@@ -267,6 +279,14 @@ function idaClass(){
 		return resolver('ida.ReadByte', arguments.length,0, va);
 	}
 
+	this.readLong = function(va){
+		return resolver('ida.ReadLong', arguments.length,0, va);
+	}
+	
+	this.readShort = function(va){
+		return resolver('ida.ReadShort', arguments.length,0, va);
+	}
+	
 	this.originalByte = function(va){
 		return resolver('ida.OriginalByte', arguments.length,0, va);
 	}
@@ -340,6 +360,17 @@ function idaClass(){
 		return resolver('ida.clearDecompilerCache', arguments.length,0);
 	}
 	
+	this.hexDump = function(x){
+		return resolver('ida.hexDump', arguments.length,0, x);
+	}
+	
+	this.hexstr = function(x){
+		return resolver('ida.hexstr', arguments.length,0, x);
+	}
+	
+	this.toBytes = function(x){
+		return resolver('ida.toBytes', arguments.length,0, x);
+	}
 
 }
 
@@ -354,6 +385,14 @@ idaClass.prototype = {
 
 	get loadedFile(){
 		return resolver('ida.LoadedFile.get', 0, this.hInst);
+	},
+	
+	get timeout(){
+		return resolver('ida.timeout.get', 0, this.hInst);
+	},
+	
+	set timeout(val){
+		return resolver('ida.timeout.let', 1, this.hInst, val);
 	}
 }
 
